@@ -26,7 +26,7 @@ alive(PNum) ->
   
 
 %% @private Parses a PDU in binary format
-parse(PDU) ->
+parse(<<2, _Tail/binary>> = PDU) ->
   [Head | Data]        = binary:split(PDU, [<<9>>], [global]),
   {params, Params}     = get_params(Data),
   <<2, Header/binary>> = Head,
@@ -34,7 +34,12 @@ parse(PDU) ->
   Operation            = ecimd2_opcode:translate(OpCode),
   Status               = maps:get(<<"900">>, Params, <<"0">>),
   StatusAtom           = ecimd2_status:translate(Status),
-  {Operation, StatusAtom, PacketNum, Params}.
+  {Operation, StatusAtom, PacketNum, Params};
+
+%% @private Unknown packet
+parse(PDU) ->
+  {unknown_pdu, PDU}.
+  
    
 %% ----------------------------------------------------------------------------
 %% internal 

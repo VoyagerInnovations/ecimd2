@@ -110,6 +110,13 @@ handle_cast({alive_response, Status, _PNum, _Params}, State) ->
   {noreply, State};
 
 %% ----------------------------------------------------------------------------
+%% @private handler unknown PDU
+%% ----------------------------------------------------------------------------
+handle_cast({unknown_pdu, PDU}, State) ->
+  io:format(standard_error, "[unknown_pdu] ~p", [PDU]),
+  {noreply, State};
+
+%% ----------------------------------------------------------------------------
 %% @private Default handle_cast callback
 %% ----------------------------------------------------------------------------
 handle_cast(_Message, State) ->
