@@ -83,6 +83,7 @@ handle_call(_Request, _From, State) ->
 %% @private login_response handler for successful login
 %% ----------------------------------------------------------------------------
 handle_cast({login_response, ok, _PNum, _Params}, State) ->
+  keepalive(20000),
   {noreply, State#state{
     connected = true
   }};
@@ -92,6 +93,20 @@ handle_cast({login_response, ok, _PNum, _Params}, State) ->
 %% ----------------------------------------------------------------------------
 handle_cast({login_response, Status, _PNum, _Params}, State) ->
   io:format(standard_error, "[login_response] ~p", [Status]),
+  {noreply, State};
+
+%% ----------------------------------------------------------------------------
+%% @private alive_response handler for successful alive
+%% ----------------------------------------------------------------------------
+handle_cast({alive_response, ok, _PNum, _Params}, State) ->
+  keepalive(20000),
+  {noreply, State};
+
+%% ----------------------------------------------------------------------------
+%% @private alive_response handler for unsuccessful alive
+%% ----------------------------------------------------------------------------
+handle_cast({alive_response, Status, _PNum, _Params}, State) ->
+  io:format(standard_error, "[alive_response] ~p", [Status]),
   {noreply, State};
 
 %% ----------------------------------------------------------------------------
@@ -110,14 +125,26 @@ handle_info(timeout, #conn_state{host=Host, port=Port,
                                  callback_mo=CallbackMO,
                                  callback_dr=CallbackDR}) ->
   timer:sleep(1000),
-  {pdu,    Packet} = ecimd2_pdu:login(1, Username, Password),
+  PNum             = <<"001">>,
+  {pdu,    Packet} = ecimd2_pdu:login(PNum, Username, Password),
   {socket, Socket} = get_socket(Host, Port),
   send(Socket, Packet),
   {noreply, #state{
-    packet_num  = 1,
+    packet_num  = PNum,
     socket      = Socket, 
     callback_mo = CallbackMO,
     callback_dr = CallbackDR
+  }};
+
+%% ----------------------------------------------------------------------------
+%% @private alive packet sending callback 
+%% ----------------------------------------------------------------------------
+handle_info(alive, #state{socket=Socket, packet_num=PNum} = State) ->
+  NewPNum       = increment(PNum),
+  {pdu, Packet} = ecimd2_pdu:alive(PNum),
+  send(Socket, Packet),
+  {noreply, State#state{
+    packet_num = NewPNum
   }};
 
 %% ----------------------------------------------------------------------------
@@ -126,6 +153,16 @@ handle_info(timeout, #conn_state{host=Host, port=Port,
 handle_info({tcp, _Socket, PDU}, State) ->
   gen_server:cast(self(), ecimd2_pdu:parse(PDU)),
   {noreply, State};
+
+%% ----------------------------------------------------------------------------
+%% @private Network disconnection
+%% ----------------------------------------------------------------------------
+handle_info({tcp_closed, _Socket}, State) ->
+  exit(disconnected),
+  {noreply, State#state{
+    connected  = false,
+    packet_num = 1
+  }};
 
 %% ----------------------------------------------------------------------------
 %% @private Default handle_info handler
@@ -148,6 +185,10 @@ code_change(_OldVsn, State, _Extra) ->
 %% ----------------------------------------------------------------------------
 %% internal
 %% ----------------------------------------------------------------------------
+
+%% @private
+keepalive(Milliseconds) ->
+  erlang:send_after(Milliseconds, self(), alive).
 
 %% @private
 get_socket(Host, Port) ->

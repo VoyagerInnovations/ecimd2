@@ -3,6 +3,7 @@
 
 -export([
   login/3,
+  alive/1,
   parse/1
 ]).
 
@@ -18,6 +19,10 @@ login(PNum, Username, Password) ->
   },
   Params = build_params(ParamMap),
   <<2, "01:", PNum/binary, Params, 3>>.
+
+%% @private Creates an alive packet
+alive(PNum) ->
+  <<2, "40:", PNum/binary, 9, 3>>.
   
 
 %% @private Parses a PDU in binary format
