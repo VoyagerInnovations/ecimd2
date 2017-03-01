@@ -19,13 +19,16 @@
   username    :: iodata(),
   password    :: iodata(),
   callback_mo :: {atom(), atom()},
-  callback_dr :: {atom(), atom()}
+  callback_dr :: {atom(), atom()},
+  socket      :: port()
 }).
 
 -record(state, {
   connected   = false :: boolean(),
   packet_num  = 1     :: integer(),
   from_list   = #{}   :: map(),
+  username    = <<>>  :: iodata(),
+  password    = <<>>  :: iodata(),
   callback_mo         :: {atom(), atom()},
   callback_dr         :: {atom(), atom()},
   socket              :: port()
@@ -43,11 +46,15 @@
 init([Opts]) ->
   Host       = maps:get(host,        Opts, <<"localhost">>),
   Port       = maps:get(port,        Opts, 7777),
+  Username   = maps:get(username,    Opts, <<>>),
+  Password   = maps:get(password,    Opts, <<>>),
   CallbackMO = maps:get(callback_mo, Opts, {esmpp_dummy_receiver, mo}),
   CallbackDR = maps:get(callback_dr, Opts, {esmpp_dummy_receiver, dr}),
   {ok, #conn_state{
     host        = Host,
     port        = Port,
+    username    = Username,
+    password    = Password,
     callback_mo = CallbackMO,
     callback_dr = CallbackDR
   }, 0}.
@@ -80,6 +87,17 @@ handle_call(_Request, _From, State) ->
   {reply, ok, State}.
 
 %% ----------------------------------------------------------------------------
+%% @private login handler
+%% ----------------------------------------------------------------------------
+handle_cast({login, Username, Password}, #state{socket=Socket} = State) ->
+  PNum          = <<"001">>,
+  {pdu, Packet} = ecimd2_pdu:login(PNum, Username, Password),
+  send(Socket, Packet),
+  {noreply, State#state{
+    packet_num = PNum
+  }};
+
+%% ----------------------------------------------------------------------------
 %% @private login_response handler for successful login
 %% ----------------------------------------------------------------------------
 handle_cast({login_response, ok, _PNum, _Params}, State) ->
@@ -110,6 +128,22 @@ handle_cast({alive_response, Status, _PNum, _Params}, State) ->
   {noreply, State};
 
 %% ----------------------------------------------------------------------------
+%% @private Greeting handler
+%% ----------------------------------------------------------------------------
+handle_cast({unknown_pdu, PDU}, #state{socket=Socket,
+                                       username=Username,
+                                       password=Password,
+                                       callback_mo=CallbackMO,
+                                       callback_dr=CallbackDR} = State) ->
+  io:format("[greeting] ~s", [PDU]),
+  gen_server:cast(self(), {login, Username, Password}),
+  {noreply, State#state{
+    socket      = Socket,
+    callback_mo = CallbackMO,
+    callback_dr = CallbackDR
+  }};
+
+%% ----------------------------------------------------------------------------
 %% @private handler unknown PDU
 %% ----------------------------------------------------------------------------
 handle_cast({unknown_pdu, PDU}, State) ->
@@ -124,7 +158,7 @@ handle_cast(_Message, State) ->
 
 %% ----------------------------------------------------------------------------
 %% @private Lazy initialization. This sleeps the process for one second then
-%% attempts to login to the Nokia MC
+%% attempts to connect to the MC
 %% ----------------------------------------------------------------------------
 handle_info(timeout, #conn_state{host=Host, port=Port,
                                  username=Username,
@@ -132,13 +166,11 @@ handle_info(timeout, #conn_state{host=Host, port=Port,
                                  callback_mo=CallbackMO,
                                  callback_dr=CallbackDR}) ->
   timer:sleep(1000),
-  PNum             = <<"001">>,
-  {pdu,    Packet} = ecimd2_pdu:login(PNum, Username, Password),
   {socket, Socket} = get_socket(Host, Port),
-  send(Socket, Packet),
   {noreply, #state{
-    packet_num  = PNum,
-    socket      = Socket, 
+    socket      = Socket,
+    username    = Username,
+    password    = Password,
     callback_mo = CallbackMO,
     callback_dr = CallbackDR
   }};
@@ -148,7 +180,7 @@ handle_info(timeout, #conn_state{host=Host, port=Port,
 %% ----------------------------------------------------------------------------
 handle_info(alive, #state{socket=Socket, packet_num=PNum} = State) ->
   NewPNum       = increment(PNum),
-  {pdu, Packet} = ecimd2_pdu:alive(PNum),
+  {pdu, Packet} = ecimd2_pdu:alive(NewPNum),
   send(Socket, Packet),
   {noreply, State#state{
     packet_num = NewPNum

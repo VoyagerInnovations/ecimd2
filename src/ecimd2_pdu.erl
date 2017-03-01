@@ -18,11 +18,13 @@ login(PNum, Username, Password) ->
     <<"011">> => Password
   },
   Params = build_params(ParamMap),
-  <<2, "01:", PNum/binary, Params, 3>>.
+  PDU    = <<2, "01:", PNum/binary, Params/binary, 3>>,
+  {pdu, PDU}.
 
 %% @private Creates an alive packet
 alive(PNum) ->
-  <<2, "40:", PNum/binary, 9, 3>>.
+  PDU = <<2, "40:", PNum/binary, 9, 3>>,
+  {pdu, PDU}.
   
 
 %% @private Parses a PDU in binary format
