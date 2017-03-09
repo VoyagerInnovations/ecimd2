@@ -11,7 +11,8 @@
 -module(ecimd2).
 
 -export([
-  start_link/1
+  start_link/1,
+  send_sms/6
 ]).
 
 %% @doc Starts connection to the SMSC and logs in with the given
@@ -51,9 +52,143 @@
 start_link(Options) ->
   Name = maps:get(name, Options, '__undefined__'),
   start_link(Name, ecimd2_worker, [Options]).
+
+%% @doc Sends a message to the specified MSISDN
+%%
+%% `Options' is an optional map that may contain the following keys:
+%%
+%% <dt><b>`cancellable'</b></dt>
+%% <dd>Determines if the message can be cancelled or not</dd>
+%% <dt><b>`tariff_class'</b></dt>
+%% <dd>Tariff code to be used for the message. This is usually MC specific</dd>
+%% <dt><b>`service_desc'</b></dt>
+%% <dd>Service description to be used for the message. 
+%%     This is usually MC specific</dd>
+%% <dt><b>`status_report'</b></dt>
+%% <dd>Flag of the cases when the status report should be returned.
+%%     See <a href="#status_report">status report flags</a></dd>
+%% <dt><b>`priority'</b></dt>
+%% <dd>Priorty of the message (0-9). Lower value means higher priority</dd>
+%%
+%% <div id="status_report">Status Report Flag values:</div>
+%% <dd>
+%%   <p>`1   - Temporary error'</p>
+%%   <p>`2   - Validity period expired'</p>
+%%   <p>`4   - Delivery failed'</p>
+%%   <p>`8   - Delivery successful'</p>
+%%   <p>`16  - Message cancelled'</p>
+%%   <p>`32  - Message deleted by operator'</p>
+%%   <p>`64  - First temporary result'</p>
+%%   <p>`128 - Reserved'</p>
+%% </dd>
+-spec send_sms(pid(), iodata(), iodata(), iodata(), iodata(), Options) -> [{message_id, iodata()}] | {error, atom()}
+  when Options :: #{ cancellable   => boolean()  ,
+                     tariff_class  => term()     ,
+                     service_desc  => term()     ,
+                     status_report => integer()  ,
+                     priority      => integer() }.
+send_sms(C, AccessCode, Sender, Destination, Message, Options) ->
+  DataCoding     = get_data_coding(Message),
+  EncodedMessage = encode(ecimd2_format:ensure_binary(Message), DataCoding),
+  MessageMap     = #{
+    dst_address  => Destination,
+    src_address  => AccessCode,
+    src_alpha    => Sender,
+    data_coding  => DataCoding,
+    message      => EncodedMessage
+  },
+  submit_msg(C, maps:merge(Options, MessageMap), EncodedMessage, DataCoding).
+  
+%% ----------------------------------------------------------------------------
+%% internal
+%% ----------------------------------------------------------------------------
+
+%% @private
+submit_msg(C, Map, Message, DataCoding)
+                       when DataCoding =:= 0, size(Message) =< 160 ->
+  [gen_server:call(C, {submit, Map})];
+submit_msg(C, Map, Message, DataCoding)
+                       when DataCoding =:= 8, size(Message) =< 140 ->
+  NewMap  = maps:remove(message, Map),
+  HexMsg  = to_hexstr(Message),
+  NewMap2 = maps:put(message_bin, HexMsg, NewMap),
+  [gen_server:call(C, {submit, NewMap2})];
+submit_msg(C, Map, Message, DataCoding) when DataCoding =:= 0 ->
+  Ref = random:uniform(255),
+  Size = size(Message),
+  Parts = ceil(Size / 153),
+  submit_msg(C, Map, Message, <<>>, Ref, 1, Parts, 153, []).
+
+%% @private
+submit_msg(_C, _Map, <<>>, _Tail, _Ref, _Part, _Parts, _Limit, Acc) ->
+  Acc;
+submit_msg(C, Map, Str, _Tail, Ref, Part, Parts, Limit, Acc)
+                                             when size(Str) > Limit ->
+  {BinPart, BinTail} = chop(Str, Limit),
+  submit_msg(C, Map, BinPart, BinTail, Ref, Part, Parts, Limit, Acc);
+submit_msg(C, Map, Str, Tail, Ref, Part, Parts, Limit, Acc) ->
+  UDH     = <<5, 0, 3, Ref, Parts, Part>>,
+  HexUDH  = to_hexstr(UDH),
+  NewMap  = maps:put(udh, HexUDH, Map),
+  NewMap2 = maps:put(message, Str, NewMap),
+  NewAcc  = Acc ++ [gen_server:call(C, {submit, NewMap2})],
+  submit_msg(C, NewMap2, Tail, <<>>, Ref, Part + 1, Parts, Limit, NewAcc).
+
+%% @private
+chop(Str, 153 = Limit) ->
+  <<TmpPart:Limit/binary, TmpTail/binary>> = Str,
+  {TmpPart, TmpTail};
+chop(Str, Limit) ->
+  <<TmpPart:Limit/binary, TmpTail/binary>> = Str,
+  Utf8 = unicode:characters_to_binary(TmpPart, utf16),
+  analyze_unicode(Utf8, Str, Limit, TmpPart, TmpTail).
+
+%% @private
+analyze_unicode({incomplete, _U1, _U2}, Str, Limit, _TmpPart, _TmpTail) ->
+  chop(Str, Limit - 2);
+analyze_unicode({error, _U1, _U2}, Str, Limit, _TmpPart, _TmpTail) ->
+  chop(Str, Limit - 2);
+analyze_unicode(_Ok, _Str, _Limit, TmpPart, TmpTail) ->
+  {TmpPart, TmpTail}.
   
 %% @private
 start_link('__undefined__', Module, Args) ->
   gen_server:start_link(Module, Args, []); 
 start_link(Name, Module, Args) ->
   gen_server:start_link(Name, Module, Args, []).
+
+%% @private
+get_data_coding(Message) ->
+  BinMessage = ecimd2_format:ensure_binary(Message), 
+  is_basic_latin([N || <<N:1/binary>> <= BinMessage]).
+
+%% @private
+is_basic_latin([]) -> 0;
+is_basic_latin([Char | Rest]) ->
+  case binary:decode_unsigned(Char) of
+    Val when Val < 128, Val =/= 96 ->
+      is_basic_latin(Rest);
+    _Val ->
+      8
+  end.
+
+%% @private
+encode(Message, 0) ->
+  gsm0338:from_utf8(Message);
+encode(Message, 8) ->
+  unicode:characters_to_binary(Message, utf8, utf16).
+
+%% @private
+to_hexstr(Bin) ->
+  Hex = lists:flatten([io_lib:format("~2.16.0B", [X]) || X <- binary_to_list(Bin)]),
+  ecimd2_format:ensure_binary(Hex).
+
+%% @private
+ceil(X) when X < 0 ->
+  trunc(X);
+ceil(X) ->
+  T = trunc(X),
+  case X - T == 0 of
+    true  -> T;
+    false -> T + 1
+  end.

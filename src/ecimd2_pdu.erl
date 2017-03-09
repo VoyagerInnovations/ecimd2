@@ -4,6 +4,7 @@
 -export([
   login/3,
   alive/1,
+  submit/2,
   parse/1
 ]).
 
@@ -24,6 +25,24 @@ login(PNum, Username, Password) ->
 %% @private Creates an alive packet
 alive(PNum) ->
   PDU = <<2, "40:", PNum/binary, 9, 3>>,
+  {pdu, PDU}.
+
+%% @private Creates a submit packet
+submit(PNum, Map) ->
+  ParamMap = #{
+    <<"021">> => maps:get(dst_address,   Map, <<>>),
+    <<"023">> => maps:get(src_address,   Map, <<>>),
+    <<"027">> => maps:get(src_alpha,     Map, <<>>),
+    <<"030">> => maps:get(data_coding,   Map, 0),
+    <<"032">> => maps:get(udh,           Map, <<>>),
+    <<"033">> => maps:get(message,       Map, <<>>),
+    <<"034">> => maps:get(message_bin,   Map, <<>>),
+    <<"056">> => maps:get(status_report, Map, 0),
+    <<"064">> => maps:get(tariff_class,  Map, <<"00">>),
+    <<"065">> => maps:get(service_desc,  Map, <<"00">>)
+  },
+  Params = build_params(ParamMap),
+  PDU    = <<2, "03:", PNum/binary, Params/binary, 3>>,
   {pdu, PDU}.
   
 
@@ -61,5 +80,13 @@ get_params([_Foot | Data], Params) ->
 %% @private
 build_params(Map) ->
   maps:fold(fun(Key, Value, Acc) ->
-    <<Acc/binary, Key/binary, 58, Value/binary, 9>>
+    ValueBin = ecimd2_format:ensure_binary(Value),
+    build_params(Acc, Key, ValueBin)
   end, <<9>>, Map).
+
+%% @private
+build_params(Acc, _Key, <<>>) ->
+  <<Acc/binary, 9>>;
+build_params(Acc, Key, Val) ->
+  <<Acc/binary, Key/binary, 58, Val/binary, 9>>.
+  

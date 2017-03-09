@@ -98,6 +98,31 @@ handle_cast({login, Username, Password}, #state{socket=Socket} = State) ->
   }};
 
 %% ----------------------------------------------------------------------------
+%% @private submit_response handler for successful submit
+%% ----------------------------------------------------------------------------
+handle_cast({submit_response, ok, PNum, Params}, 
+                                        #state{from_list=Clients} = State) ->
+  Client     = maps:get(PNum, Clients, '__undefined__'),
+  DstAddress = maps:get(<<"021">>, Params, <<>>),
+  Timestamp  = maps:get(<<"060">>, Params, <<"0">>),
+  MessageId  = <<DstAddress/binary, Timestamp/binary>>,
+  gen_server:reply(Client, {message_id, MessageId}),
+  {noreply, State#state{
+    from_list = maps:remove(PNum, Clients)
+  }};
+
+%% ----------------------------------------------------------------------------
+%% @private submit_response handler for successful submit
+%% ----------------------------------------------------------------------------
+handle_cast({submit_response, Status, PNum, _Params}, 
+                                        #state{from_list=Clients} = State) ->
+  Client     = maps:get(PNum, Clients, '__undefined__'),
+  gen_server:reply(Client, {error, Status}),
+  {noreply, State#state{
+    from_list = maps:remove(PNum, Clients)
+  }};
+
+%% ----------------------------------------------------------------------------
 %% @private login_response handler for successful login
 %% ----------------------------------------------------------------------------
 handle_cast({login_response, ok, _PNum, _Params}, State) ->
@@ -135,7 +160,7 @@ handle_cast({unknown_pdu, PDU}, #state{socket=Socket,
                                        password=Password,
                                        callback_mo=CallbackMO,
                                        callback_dr=CallbackDR} = State) ->
-  io:format("[greeting] ~s", [PDU]),
+  io:format("[greeting] ~s~n", [PDU]),
   gen_server:cast(self(), {login, Username, Password}),
   {noreply, State#state{
     socket      = Socket,
@@ -239,6 +264,8 @@ send(Socket, Packet) ->
   ok = gen_tcp:send(Socket, Packet).
 
 %% @private
+increment(<<"255">>) -> <<"001">>;
+increment(<<"254">>) -> <<"000">>;
 increment(PNum) ->
   IntPNum = binary_to_integer(PNum),
   NewIntPNum = IntPNum + 2,
