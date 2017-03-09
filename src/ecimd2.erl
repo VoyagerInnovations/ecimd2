@@ -117,7 +117,12 @@ submit_msg(C, Map, Message, DataCoding) when DataCoding =:= 0 ->
   Ref = random:uniform(255),
   Size = size(Message),
   Parts = ceil(Size / 153),
-  submit_msg(C, Map, Message, <<>>, Ref, 1, Parts, 153, []).
+  submit_msg(C, Map, Message, <<>>, Ref, 1, Parts, 153, []);
+submit_msg(C, Map, Message, DataCoding) when DataCoding =:= 8 ->
+  Ref = random:uniform(255),
+  Size = size(Message),
+  Parts = ceil(Size / 134),
+  submit_msg(C, Map, Message, <<>>, Ref, 1, Parts, 134, []).
 
 %% @private
 submit_msg(_C, _Map, <<>>, _Tail, _Ref, _Part, _Parts, _Limit, Acc) ->
