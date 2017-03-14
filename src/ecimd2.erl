@@ -17,7 +17,7 @@
 
 %% @doc Starts connection to the SMSC and logs in with the given
 %% credentials
-
+%%
 %% `Options' is a map that should contain the following keys:
 %%
 %% <dt><b>`name'</b></dt>
