@@ -5,6 +5,7 @@
   login/3,
   alive/1,
   deliver_message_response/1,
+  deliver_status_report_response/1,
   submit/2,
   parse/1
 ]).
@@ -31,6 +32,11 @@ alive(PNum) ->
 %% @private Creates a deliver_message_response packet
 deliver_message_response(PNum) ->
   PDU = <<2, "70:", PNum/binary, 9, 3>>,
+  {pdu, PDU}.
+
+%% @private Creates a deliver_status_report_response packet
+deliver_status_report_response(PNum) ->
+  PDU = <<2, "73:", PNum/binary, 9, 3>>,
   {pdu, PDU}.
 
 %% @private Creates a submit packet

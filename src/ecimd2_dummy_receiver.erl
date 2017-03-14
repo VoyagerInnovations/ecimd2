@@ -4,7 +4,7 @@
 
 -export([
   mo/3,
-  dr/3
+  dr/4
 ]).
 
 %% @private
@@ -16,10 +16,10 @@ mo(Sender, Receiver, Message) ->
   ).
 
 %% @private
-dr(Sender, Receiver, Status) ->
+dr(Sender, Receiver, MessageId, Status) ->
   io:format(
     standard_error, 
-    "[~p] Warning - Un-acted delivery receipt- Sender: ~p - Receiver: ~p - Status: ~p~n",
-    [?MODULE, Sender, Receiver, Status]
+    "[~p] Warning - Un-acted delivery receipt- Sender: ~p - Receiver: ~p - Message ID: ~p - Status: ~p~n",
+    [?MODULE, Sender, Receiver, MessageId, Status]
   ).
 

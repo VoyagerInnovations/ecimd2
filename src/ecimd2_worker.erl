@@ -113,7 +113,7 @@ handle_cast({submit_response, ok, PNum, Params},
   Client     = maps:get(PNum, Clients, '__undefined__'),
   DstAddress = maps:get(<<"021">>, Params, <<>>),
   Timestamp  = maps:get(<<"060">>, Params, <<"0">>),
-  MessageId  = <<DstAddress/binary, Timestamp/binary>>,
+  MessageId  = <<Timestamp/binary, DstAddress/binary>>,
   gen_server:reply(Client, {message_id, MessageId}),
   {noreply, State#state{
     from_list = maps:remove(PNum, Clients)
@@ -223,10 +223,10 @@ handle_cast({chopped_mo, _Key, _MOPart}, State) ->
 %% ----------------------------------------------------------------------------
 handle_cast({deliver_message, ok, PNum, Params}, 
                            #state{socket=Socket} = State) ->
-  Message = extract_message(Params),
-  UDH     = maps:get(<<"032">>, Params, <<>>),
-  SrcAddr = maps:get(<<"023">>, Params, <<>>),
-  DstAddr = maps:get(<<"021">>, Params, <<>>),
+  Message       = extract_message(Params),
+  UDH           = maps:get(<<"032">>, Params, <<>>),
+  SrcAddr       = maps:get(<<"023">>, Params, <<>>),
+  DstAddr       = maps:get(<<"021">>, Params, <<>>),
   {pdu, Packet} = ecimd2_pdu:deliver_message_response(PNum),
   send(Socket, Packet),
   gen_server:cast(self(), {deliver_concat, UDH, SrcAddr, DstAddr, Message}),
@@ -237,6 +237,29 @@ handle_cast({deliver_message, ok, PNum, Params},
 %% ----------------------------------------------------------------------------
 handle_cast({deliver_message, Status, _PNum, _Params}, State) ->
   io:format(standard_error, "[deliver_message] Error: ~p", [Status]),
+  {noreply, State};
+
+%% ----------------------------------------------------------------------------
+%% @private deliver_status_report PDU
+%% ----------------------------------------------------------------------------
+handle_cast({deliver_status_report, ok, PNum, Params}, 
+                           #state{socket=Socket,
+                                  callback_mo={Mod, Fun}} = State) ->
+  Status        = maps:get(<<"061">>, Params, <<"0">>),
+  Timestamp     = maps:get(<<"060">>, Params, <<"0">>),
+  SrcAddr       = maps:get(<<"023">>, Params, <<>>),
+  DstAddr       = maps:get(<<"021">>, Params, <<>>),
+  MessageId     = <<Timestamp/binary, DstAddr/binary>>,
+  {pdu, Packet} = ecimd2_pdu:deliver_status_report_response(PNum),
+  send(Socket, Packet),
+  spawn(Mod, Fun, [SrcAddr, DstAddr, MessageId, Status]),
+  {noreply, State};
+
+%% ----------------------------------------------------------------------------
+%% @private deliver_status_report PDU
+%% ----------------------------------------------------------------------------
+handle_cast({deliver_status_report, Status, _PNum, _Params}, State) ->
+  io:format(standard_error, "[deliver_status_report] Error: ~p", [Status]),
   {noreply, State};
 
 %% ----------------------------------------------------------------------------
