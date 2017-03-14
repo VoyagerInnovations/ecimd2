@@ -5,3 +5,4 @@ otp_release:
 before_script:
   - "./bootstrap_travis.sh"
 script: "./rebar3 compile"
+
