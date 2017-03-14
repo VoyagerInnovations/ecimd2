@@ -13,6 +13,13 @@
   code_change/3
 ]).
 
+-record(mo_part, {
+  max_parts :: integer(),
+  src_addr  :: iodata(),
+  dst_addr  :: iodata(),
+  messages  :: [iodata()]
+}).
+
 -record(conn_state, {
   host        :: iodata(),
   port        :: integer(),
@@ -27,6 +34,7 @@
   connected   = false :: boolean(),
   packet_num  = 1     :: integer(),
   from_list   = #{}   :: map(),
+  concat_list = #{}   :: map(),
   username    = <<>>  :: iodata(),
   password    = <<>>  :: iodata(),
   callback_mo         :: {atom(), atom()},
@@ -48,8 +56,8 @@ init([Opts]) ->
   Port       = maps:get(port,        Opts, 7777),
   Username   = maps:get(username,    Opts, <<>>),
   Password   = maps:get(password,    Opts, <<>>),
-  CallbackMO = maps:get(callback_mo, Opts, {esmpp_dummy_receiver, mo}),
-  CallbackDR = maps:get(callback_dr, Opts, {esmpp_dummy_receiver, dr}),
+  CallbackMO = maps:get(callback_mo, Opts, {ecimd2_dummy_receiver, mo}),
+  CallbackDR = maps:get(callback_dr, Opts, {ecimd2_dummy_receiver, dr}),
   {ok, #conn_state{
     host        = Host,
     port        = Port,
@@ -116,7 +124,7 @@ handle_cast({submit_response, ok, PNum, Params},
 %% ----------------------------------------------------------------------------
 handle_cast({submit_response, Status, PNum, _Params}, 
                                         #state{from_list=Clients} = State) ->
-  Client     = maps:get(PNum, Clients, '__undefined__'),
+  Client = maps:get(PNum, Clients, '__undefined__'),
   gen_server:reply(Client, {error, Status}),
   {noreply, State#state{
     from_list = maps:remove(PNum, Clients)
@@ -150,6 +158,85 @@ handle_cast({alive_response, ok, _PNum, _Params}, State) ->
 %% ----------------------------------------------------------------------------
 handle_cast({alive_response, Status, _PNum, _Params}, State) ->
   io:format(standard_error, "[alive_response] ~p", [Status]),
+  {noreply, State};
+
+%% ----------------------------------------------------------------------------
+%% @private deliver_message_parse handler. For short MO messages
+%% ----------------------------------------------------------------------------
+handle_cast({deliver_concat, <<>>, SrcAddr, DstAddr, Message}, 
+                            #state{callback_mo={Mod, Fun}} = State) ->
+  spawn(Mod, Fun, [SrcAddr, DstAddr, Message]),
+  {noreply, State};
+
+%% ----------------------------------------------------------------------------
+%% @private deliver_message_parse handler. For short MO messages
+%% ----------------------------------------------------------------------------
+handle_cast({deliver_concat, HexUDH, SrcAddr, DstAddr, Message}, 
+                            #state{concat_list=ConcatMap} = State) ->
+  <<_Misc:24, Ref:8, Parts:8, Part:8>> = from_hexstr(HexUDH),
+  RefBin       = integer_to_binary(Ref),
+  KeyBin       = <<SrcAddr/binary, ":", DstAddr/binary, ":", RefBin/binary>>,
+  MOPart       = #mo_part{
+    max_parts  = Parts,
+    src_addr   = SrcAddr,
+    dst_addr   = DstAddr,
+    messages   = []
+  },
+  CurrMOPart   = maps:get(KeyBin, ConcatMap, MOPart),
+  CurrPairs    = CurrMOPart#mo_part.messages,
+  PartPair     = {Part, Message},
+  NewMOPart    = CurrMOPart#mo_part{
+    messages   = CurrPairs ++ [PartPair]
+  },
+  NewConcatMap = maps:put(KeyBin, NewMOPart, ConcatMap),
+  gen_server:cast(self(), {chopped_mo, KeyBin, NewMOPart}),
+  {noreply, State#state{
+    concat_list = NewConcatMap
+  }};
+
+%% ----------------------------------------------------------------------------
+%% @private Chopped MO event (complete)
+%% ----------------------------------------------------------------------------
+handle_cast({chopped_mo, Key, #mo_part{max_parts=MaxParts, src_addr=SrcAddr,
+                                       dst_addr=DstAddr, messages=Messages}},
+                              #state{concat_list=ConcatMap} = State)
+                                when length(Messages) >= MaxParts ->
+  %% Note to self: you can probably sort on the fly
+  SortedMessages = lists:keysort(1, Messages),
+  Message        = lists:foldl(fun({_Part, MsgPart}, Acc) ->
+    <<Acc/binary, MsgPart/binary>>
+  end, <<>>, SortedMessages),
+  gen_server:cast(self(), {deliver_concat, <<>>, SrcAddr, DstAddr, Message}),
+  NewConcatMap   = maps:remove(Key, ConcatMap),
+  {noreply, State#state{
+    concat_list = NewConcatMap
+  }};
+
+%% ----------------------------------------------------------------------------
+%% @private Chopped MO event (incomplete)
+%% ----------------------------------------------------------------------------
+handle_cast({chopped_mo, _Key, _MOPart}, State) ->
+  {noreply, State};
+
+%% ----------------------------------------------------------------------------
+%% @private deliver_message PDU
+%% ----------------------------------------------------------------------------
+handle_cast({deliver_message, ok, PNum, Params}, 
+                           #state{socket=Socket} = State) ->
+  Message = extract_message(Params),
+  UDH     = maps:get(<<"032">>, Params, <<>>),
+  SrcAddr = maps:get(<<"023">>, Params, <<>>),
+  DstAddr = maps:get(<<"021">>, Params, <<>>),
+  {pdu, Packet} = ecimd2_pdu:deliver_message_response(PNum),
+  send(Socket, Packet),
+  gen_server:cast(self(), {deliver_concat, UDH, SrcAddr, DstAddr, Message}),
+  {noreply, State};
+
+%% ----------------------------------------------------------------------------
+%% @private deliver_message PDU
+%% ----------------------------------------------------------------------------
+handle_cast({deliver_message, Status, _PNum, _Params}, State) ->
+  io:format(standard_error, "[deliver_message] Error: ~p", [Status]),
   {noreply, State};
 
 %% ----------------------------------------------------------------------------
@@ -278,3 +365,22 @@ binpad(Bin, Length) when size(Bin) >= Length ->
 binpad(Bin, Length) ->
   NewBin = <<"0", Bin/binary>>,
   binpad(NewBin, Length).
+
+%% @private
+extract_message(#{<<"030">> := <<"8">>, <<"034">> := HexStr}) ->
+  Message = from_hexstr(HexStr),
+  unicode:characters_to_binary(Message, utf16, utf8);
+extract_message(#{<<"033">> := Message}) ->
+  Message.
+
+%% @private
+from_hexstr(HexStr) ->
+  from_hexstr(binary_to_list(HexStr), []).
+from_hexstr([], Acc) ->
+  list_to_binary(lists:reverse(Acc));
+from_hexstr([B1, B2 | Tail], Acc) ->
+  {ok, [Char], []} = io_lib:fread("~16u", [B1, B2]),
+  from_hexstr(Tail, [Char | Acc]);
+from_hexstr([B | Tail], Acc) ->
+  {ok, [Char], []} = io_lib:fread("~16u", lists:flatten([B, "0"])),
+  from_hexstr(Tail, [Char | Acc]).

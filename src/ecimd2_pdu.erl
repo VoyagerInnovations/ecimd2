@@ -4,6 +4,7 @@
 -export([
   login/3,
   alive/1,
+  deliver_message_response/1,
   submit/2,
   parse/1
 ]).
@@ -25,6 +26,11 @@ login(PNum, Username, Password) ->
 %% @private Creates an alive packet
 alive(PNum) ->
   PDU = <<2, "40:", PNum/binary, 9, 3>>,
+  {pdu, PDU}.
+
+%% @private Creates a deliver_message_response packet
+deliver_message_response(PNum) ->
+  PDU = <<2, "70:", PNum/binary, 9, 3>>,
   {pdu, PDU}.
 
 %% @private Creates a submit packet

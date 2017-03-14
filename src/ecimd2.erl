@@ -117,27 +117,27 @@ submit_msg(C, Map, Message, DataCoding) when DataCoding =:= 0 ->
   Ref = random:uniform(255),
   Size = size(Message),
   Parts = ceil(Size / 153),
-  submit_msg(C, Map, Message, <<>>, Ref, 1, Parts, 153, []);
+  submit_msg(C, Map, Message, <<>>, Ref, 1, Parts, 153, message, []);
 submit_msg(C, Map, Message, DataCoding) when DataCoding =:= 8 ->
   Ref = random:uniform(255),
   Size = size(Message),
   Parts = ceil(Size / 134),
-  submit_msg(C, Map, Message, <<>>, Ref, 1, Parts, 134, []).
+  submit_msg(C, Map, Message, <<>>, Ref, 1, Parts, 134, message_bin, []).
 
 %% @private
-submit_msg(_C, _Map, <<>>, _Tail, _Ref, _Part, _Parts, _Limit, Acc) ->
+submit_msg(_C, _Map, <<>>, _Tail, _Ref, _Part, _Parts, _Limit, _Key, Acc) ->
   Acc;
-submit_msg(C, Map, Str, _Tail, Ref, Part, Parts, Limit, Acc)
+submit_msg(C, Map, Str, _Tail, Ref, Part, Parts, Limit, _Key, Acc)
                                              when size(Str) > Limit ->
   {BinPart, BinTail} = chop(Str, Limit),
-  submit_msg(C, Map, BinPart, BinTail, Ref, Part, Parts, Limit, Acc);
-submit_msg(C, Map, Str, Tail, Ref, Part, Parts, Limit, Acc) ->
+  submit_msg(C, Map, BinPart, BinTail, Ref, Part, Parts, Limit, _Key, Acc);
+submit_msg(C, Map, Str, Tail, Ref, Part, Parts, Limit, Key, Acc) ->
   UDH     = <<5, 0, 3, Ref, Parts, Part>>,
   HexUDH  = to_hexstr(UDH),
   NewMap  = maps:put(udh, HexUDH, Map),
-  NewMap2 = maps:put(message, Str, NewMap),
+  NewMap2 = maps:put(Key, Str, NewMap),
   NewAcc  = Acc ++ [gen_server:call(C, {submit, NewMap2})],
-  submit_msg(C, NewMap2, Tail, <<>>, Ref, Part + 1, Parts, Limit, NewAcc).
+  submit_msg(C, NewMap2, Tail, <<>>, Ref, Part + 1, Parts, Limit, Key, NewAcc).
 
 %% @private
 chop(Str, 153 = Limit) ->
