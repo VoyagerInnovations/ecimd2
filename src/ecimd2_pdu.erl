@@ -91,14 +91,15 @@ get_params([_Foot | Data], Params) ->
 
 %% @private
 build_params(Map) ->
-  maps:fold(fun(Key, Value, Acc) ->
+  Params = maps:fold(fun(Key, Value, Acc) ->
     ValueBin = ecimd2_format:ensure_binary(Value),
     build_params(Acc, Key, ValueBin)
-  end, <<9>>, Map).
+  end, <<>>, Map),
+  <<Params/binary, 9>>.
 
 %% @private
 build_params(Acc, _Key, <<>>) ->
-  <<Acc/binary, 9>>;
+  <<Acc/binary>>;
 build_params(Acc, Key, Val) ->
-  <<Acc/binary, Key/binary, 58, Val/binary, 9>>.
+  <<Acc/binary, 9, Key/binary, 58, Val/binary>>.
   
