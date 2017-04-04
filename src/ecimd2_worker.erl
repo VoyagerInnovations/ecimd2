@@ -337,6 +337,12 @@ handle_info(timeout, #conn_state{host=Host, port=Port,
   }};
 
 %% ----------------------------------------------------------------------------
+%% @private alive handler on disconnected state
+%% ----------------------------------------------------------------------------
+handle_info(alive, #state{connected = false} = State) ->
+  {noreply, State};
+
+%% ----------------------------------------------------------------------------
 %% @private alive packet sending callback 
 %% ----------------------------------------------------------------------------
 handle_info(alive, #state{socket=Socket, packet_num=PNum} = State) ->
