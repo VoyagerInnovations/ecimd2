@@ -3,6 +3,7 @@
 
 -export([
   login/3,
+  logout/1,
   alive/1,
   deliver_message_response/1,
   deliver_status_report_response/1,
@@ -22,6 +23,10 @@ login(PNum, Username, Password) ->
   },
   Params = build_params(ParamMap),
   PDU    = <<2, "01:", PNum/binary, Params/binary, 3>>,
+  {pdu, PDU}.
+
+logout(PNum) ->
+  PDU = <<2, "02:", PNum/binary, 9, 3>>,
   {pdu, PDU}.
 
 %% @private Creates an alive packet

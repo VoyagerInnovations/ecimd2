@@ -263,6 +263,32 @@ handle_cast({deliver_status_report, Status, _PNum, _Params}, State) ->
   {noreply, State};
 
 %% ----------------------------------------------------------------------------
+%% @private logout PDU
+%% ----------------------------------------------------------------------------
+handle_cast(logout, #state{socket=Socket, packet_num=PNum} = State) ->
+  NewPNum       = increment(PNum),
+  {pdu, Packet} = ecimd2_pdu:logout(NewPNum),
+  send(Socket, Packet),
+  {noreply, State#state{
+    packet_num = NewPNum
+  }};
+
+%% ----------------------------------------------------------------------------
+%% @private logout_response handler for successful logout
+%% ----------------------------------------------------------------------------
+handle_cast({logout_response, ok, _PNum, _Params}, State) ->
+  {noreply, State#state{
+    connected = false
+  }};
+
+%% ----------------------------------------------------------------------------
+%% @private logout_response handler for unsuccessful logout
+%% ----------------------------------------------------------------------------
+handle_cast({logout_response, Status, _PNum, _Params}, State) ->
+  io:format(standard_error, "[logout_response] ~p", [Status]),
+  {noreply, State};
+
+%% ----------------------------------------------------------------------------
 %% @private Greeting handler
 %% ----------------------------------------------------------------------------
 handle_cast({unknown_pdu, PDU}, #state{socket=Socket,
@@ -309,6 +335,12 @@ handle_info(timeout, #conn_state{host=Host, port=Port,
     callback_mo = CallbackMO,
     callback_dr = CallbackDR
   }};
+
+%% ----------------------------------------------------------------------------
+%% @private alive handler on disconnected state
+%% ----------------------------------------------------------------------------
+handle_info(alive, #state{connected = false} = State) ->
+  {noreply, State};
 
 %% ----------------------------------------------------------------------------
 %% @private alive packet sending callback 

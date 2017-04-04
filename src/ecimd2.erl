@@ -12,7 +12,8 @@
 
 -export([
   start_link/1,
-  send_sms/6
+  send_sms/6,
+  logout/1
 ]).
 
 %% @doc Starts connection to the SMSC and logs in with the given
@@ -99,6 +100,11 @@ send_sms(C, AccessCode, Sender, Destination, Message, Options) ->
   },
   submit_msg(C, maps:merge(Options, MessageMap), EncodedMessage, DataCoding).
   
+%% @doc Logout the session
+-spec logout(pid()) -> ok.
+logout(C) ->
+  gen_server:cast(C, logout).
+
 %% ----------------------------------------------------------------------------
 %% internal
 %% ----------------------------------------------------------------------------
