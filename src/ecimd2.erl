@@ -107,6 +107,7 @@ logout(C) ->
   gen_server:cast(C, logout).
 
 %% @doc Check if connected to server
+-spec is_connected(pid()) -> boolean().
 is_connected(C) ->
   gen_server:call(C, is_connected).
 
