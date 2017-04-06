@@ -328,16 +328,15 @@ handle_cast(_Message, State) ->
   {noreply, State}.
 
 %% ----------------------------------------------------------------------------
-%% @private Lazy initialization. This sleeps the process for one second then
-%% attempts to connect to the MC
+%% @private Lazy initialization. This sleeps the process for a definite amount
+%% of time and then calls connect event
 %% ----------------------------------------------------------------------------
 handle_info(timeout, #conn_state{reconnect=Reconnect} = State) ->
   erlang:send_after(Reconnect, self(), connect),
   {noreply, State};
 
 %% ----------------------------------------------------------------------------
-%% @private Lazy initialization. This sleeps the process for one second then
-%% attempts to connect to the MC
+%% @private Connects to socket and puts the socket object to the state
 %% ----------------------------------------------------------------------------
 handle_info(connect, #conn_state{host=Host, port=Port,
                                  username=Username,
