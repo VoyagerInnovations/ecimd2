@@ -89,6 +89,12 @@ handle_call({submit, Message}, From,
   }};
 
 %% ----------------------------------------------------------------------------
+%% @private is_connected callback
+%% ----------------------------------------------------------------------------
+handle_call(is_connected,  _From, #state{connected = Connected} = State) ->
+  {reply, {status, Connected}, State};
+
+%% ----------------------------------------------------------------------------
 %% @private Default handle_call callback
 %% ----------------------------------------------------------------------------
 handle_call(_Request, _From, State) ->
