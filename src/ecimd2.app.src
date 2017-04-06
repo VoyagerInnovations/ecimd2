@@ -1,12 +1,12 @@
 {application, ecimd2,
  [{description, "CIMD2 client (SME) for Erlang"},
-  {vsn, "0.0.1"},
+  {vsn, "0.0.2"},
   {registered, []},
   {applications, [kernel, stdlib]},
   {env,[]},
   {modules, []},
 
-  {maintainers, ["Ruel Pagayon"]},
+  {maintainers, ["Ruel Pagayon", "Jorick Caberio"]},
   {licenses, ["MIT"]},
   {links, [
     {"Github", "https://github.com/VoyagerInnovations/esmpp"}
