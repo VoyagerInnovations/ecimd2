@@ -25,6 +25,7 @@
   port        :: integer(),
   username    :: iodata(),
   password    :: iodata(),
+  reconnect   :: integer(),
   callback_mo :: {atom(), atom()},
   callback_dr :: {atom(), atom()},
   socket      :: port()
@@ -58,11 +59,14 @@ init([Opts]) ->
   Password   = maps:get(password,    Opts, <<>>),
   CallbackMO = maps:get(callback_mo, Opts, {ecimd2_dummy_receiver, mo}),
   CallbackDR = maps:get(callback_dr, Opts, {ecimd2_dummy_receiver, dr}),
+  ReconTerm  = maps:get(reconnect,   Opts, 1000),
+  Reconnect  = get_reconnect(ReconTerm, Host, Port),
   {ok, #conn_state{
     host        = Host,
     port        = Port,
     username    = Username,
     password    = Password,
+    reconnect   = Reconnect,
     callback_mo = CallbackMO,
     callback_dr = CallbackDR
   }, 0}.
@@ -250,7 +254,7 @@ handle_cast({deliver_message, Status, _PNum, _Params}, State) ->
 %% ----------------------------------------------------------------------------
 handle_cast({deliver_status_report, ok, PNum, Params}, 
                            #state{socket=Socket,
-                                  callback_mo={Mod, Fun}} = State) ->
+                                  callback_dr={Mod, Fun}} = State) ->
   Status        = maps:get(<<"061">>, Params, <<"0">>),
   Timestamp     = maps:get(<<"060">>, Params, <<"0">>),
   SrcAddr       = maps:get(<<"023">>, Params, <<>>),
@@ -327,12 +331,19 @@ handle_cast(_Message, State) ->
 %% @private Lazy initialization. This sleeps the process for one second then
 %% attempts to connect to the MC
 %% ----------------------------------------------------------------------------
-handle_info(timeout, #conn_state{host=Host, port=Port,
+handle_info(timeout, #conn_state{reconnect=Reconnect} = State) ->
+  erlang:send_after(Reconnect, self(), connect),
+  {noreply, State};
+
+%% ----------------------------------------------------------------------------
+%% @private Lazy initialization. This sleeps the process for one second then
+%% attempts to connect to the MC
+%% ----------------------------------------------------------------------------
+handle_info(connect, #conn_state{host=Host, port=Port,
                                  username=Username,
                                  password=Password,
                                  callback_mo=CallbackMO,
                                  callback_dr=CallbackDR}) ->
-  timer:sleep(1000),
   {socket, Socket} = get_socket(Host, Port),
   {noreply, #state{
     socket      = Socket,
@@ -445,3 +456,14 @@ from_hexstr([B1, B2 | Tail], Acc) ->
 from_hexstr([B | Tail], Acc) ->
   {ok, [Char], []} = io_lib:fread("~16u", lists:flatten([B, "0"])),
   from_hexstr(Tail, [Char | Acc]).
+
+%% @private
+get_reconnect({Module, Function}, Host, Port) ->
+  HostBin = esmpp_format:ensure_binary(Host),
+  PortBin = esmpp_format:ensure_binary(Port),
+  Id      = <<"id_", HostBin/binary, ":", PortBin/binary>>,
+  apply(Module, Function, [Id]);
+get_reconnect(Time, _Host, _Port) when is_integer(Time) ->
+  Time;
+get_reconnect(_Unknown, _Host, _Port) ->
+  1000.

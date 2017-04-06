@@ -31,6 +31,10 @@
 %% <dt><b>`callback_dr'</b></dt>
 %% <dd>Tuple of module and function atoms to be executed when a delivery 
 %%     receipt has been received</dd>
+%% <dt><b>`reconnect'</b></dt>
+%% <dd>Reconnect time for lazy initialization. This indicates the number of milliseconds
+%%     to sleep before attempting to connect to the SMSC. This accepts a module and function
+%%     atom tuple for external sources.</dd>
 %% <dt><b>`host'</b></dt>
 %% <dd>Hostname or IP address of the Nokia MC</dd>
 %% <dt><b>`port'</b></dt>
@@ -43,11 +47,13 @@
   when Options    :: #{ name        => ServerName ,
                         callback_mo => Callback   ,
                         callback_dr => Callback   ,
+                        reconnect   => Reconnect  , 
                         host        => iodata()   ,
                         port        => integer()  ,
                         username    => iodata()   ,
                         password    => iodata()  },
        Callback   :: {atom(), atom()},
+       Reconnect  :: integer() | {atom(), atom()},
        ServerName :: {local,  Name       :: atom()} |
                      {global, GlobalName :: term()} |
                      {via,    Module     :: atom(), ViaName :: term()}.
