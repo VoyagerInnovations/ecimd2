@@ -250,9 +250,9 @@ handle_cast({deliver_message, Status, _PNum, _Params}, State) ->
   {noreply, State};
 
 %% ----------------------------------------------------------------------------
-%% @private deliver_status_report PDU
+%% @private deliver_status PDU
 %% ----------------------------------------------------------------------------
-handle_cast({deliver_status_report, ok, PNum, Params}, 
+handle_cast({deliver_status, ok, PNum, Params}, 
                            #state{socket=Socket,
                                   callback_dr={Mod, Fun}} = State) ->
   Status        = maps:get(<<"061">>, Params, <<"0">>),
@@ -266,10 +266,10 @@ handle_cast({deliver_status_report, ok, PNum, Params},
   {noreply, State};
 
 %% ----------------------------------------------------------------------------
-%% @private deliver_status_report PDU
+%% @private deliver_status PDU
 %% ----------------------------------------------------------------------------
-handle_cast({deliver_status_report, Status, _PNum, _Params}, State) ->
-  io:format(standard_error, "[deliver_status_report] Error: ~p", [Status]),
+handle_cast({deliver_status, Status, _PNum, _Params}, State) ->
+  io:format(standard_error, "[deliver_status] Error: ~p", [Status]),
   {noreply, State};
 
 %% ----------------------------------------------------------------------------
