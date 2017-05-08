@@ -32,15 +32,15 @@
 }).
 
 -record(state, {
-  connected   = false :: boolean(),
-  packet_num  = 1     :: integer(),
-  from_list   = #{}   :: map(),
-  concat_list = #{}   :: map(),
-  username    = <<>>  :: iodata(),
-  password    = <<>>  :: iodata(),
-  callback_mo         :: {atom(), atom()},
-  callback_dr         :: {atom(), atom()},
-  socket              :: port()
+  connected   = false     :: boolean(),
+  packet_num  = <<"001">> :: binary(),
+  from_list   = #{}       :: map(),
+  concat_list = #{}       :: map(),
+  username    = <<>>      :: iodata(),
+  password    = <<>>      :: iodata(),
+  callback_mo             :: {atom(), atom()},
+  callback_dr             :: {atom(), atom()},
+  socket                  :: port()
 }).
 
 %% -----------------------------------------------------------------------------
