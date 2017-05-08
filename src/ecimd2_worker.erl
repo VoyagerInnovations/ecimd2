@@ -93,6 +93,12 @@ handle_call({submit, Message}, From,
   }};
 
 %% ----------------------------------------------------------------------------
+%% @private is_connected callback while still in the conn_state
+%% ----------------------------------------------------------------------------
+handle_call(is_connected,  _From, #conn_state{} = State) ->
+  {reply, {status, false}, State};
+
+%% ----------------------------------------------------------------------------
 %% @private is_connected callback
 %% ----------------------------------------------------------------------------
 handle_call(is_connected,  _From, #state{connected = Connected} = State) ->
