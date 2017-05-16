@@ -268,7 +268,7 @@ handle_cast({deliver_status, ok, PNum, Params},
   MessageId     = <<Timestamp/binary, DstAddr/binary>>,
   {pdu, Packet} = ecimd2_pdu:deliver_status_report_response(PNum),
   send(Socket, Packet),
-  spawn(Mod, Fun, [SrcAddr, DstAddr, MessageId, Status]),
+  spawn(Mod, Fun, [cimd2, SrcAddr, DstAddr, MessageId, Status]),
   {noreply, State};
 
 %% ----------------------------------------------------------------------------
