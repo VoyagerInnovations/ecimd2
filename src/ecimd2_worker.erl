@@ -464,8 +464,8 @@ from_hexstr([B | Tail], Acc) ->
 
 %% @private
 get_reconnect({Module, Function}, Host, Port) ->
-  HostBin = esmpp_format:ensure_binary(Host),
-  PortBin = esmpp_format:ensure_binary(Port),
+  HostBin = ecimd2_format:ensure_binary(Host),
+  PortBin = ecimd2_format:ensure_binary(Port),
   Id      = <<"id_", HostBin/binary, ":", PortBin/binary>>,
   apply(Module, Function, [Id]);
 get_reconnect(Time, _Host, _Port) when is_integer(Time) ->
