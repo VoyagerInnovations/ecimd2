@@ -23,7 +23,7 @@ Other commands will be supported in the future versions.
 
 ```erlang
 {deps, [
-  {ecimd2, "0.0.5"}
+  {ecimd2, "0.0.6"}
 ]}. 
 ```
 
