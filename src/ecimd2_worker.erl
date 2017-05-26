@@ -61,6 +61,7 @@ init([Opts]) ->
   CallbackDR = maps:get(callback_dr, Opts, {ecimd2_dummy_receiver, dr}),
   ReconTerm  = maps:get(reconnect,   Opts, 1000),
   Reconnect  = get_reconnect(ReconTerm, Host, Port),
+  erlang:send_after(Reconnect, self(), connect),
   {ok, #conn_state{
     host        = Host,
     port        = Port,
@@ -69,7 +70,7 @@ init([Opts]) ->
     reconnect   = Reconnect,
     callback_mo = CallbackMO,
     callback_dr = CallbackDR
-  }, 0}.
+  }}.
 
 %% ----------------------------------------------------------------------------
 %% @private submit operation - not connected
@@ -332,14 +333,6 @@ handle_cast({unknown_pdu, PDU}, State) ->
 %% ----------------------------------------------------------------------------
 handle_cast(_Message, State) ->
   {noreply, State}.
-
-%% ----------------------------------------------------------------------------
-%% @private Lazy initialization. This sleeps the process for a definite amount
-%% of time and then calls connect event
-%% ----------------------------------------------------------------------------
-handle_info(timeout, #conn_state{reconnect=Reconnect} = State) ->
-  erlang:send_after(Reconnect, self(), connect),
-  {noreply, State};
 
 %% ----------------------------------------------------------------------------
 %% @private Connects to socket and puts the socket object to the state
