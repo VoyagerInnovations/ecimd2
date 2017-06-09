@@ -160,7 +160,13 @@ submit_msg(C, Map, Str, Tail, Ref, Part, Parts, Limit, Key, Acc) ->
 %% @private
 chop(Str, 153 = Limit) ->
   <<TmpPart:Limit/binary, TmpTail/binary>> = Str,
-  {TmpPart, TmpTail};
+  case TmpPart of
+    <<Rest:152/binary, 16#1B>> ->
+      <<Rest:152/binary, TmpTail2/binary>> = Str,
+      {Rest, TmpTail2};
+    _Ok ->
+      {TmpPart, TmpTail}
+  end;
 chop(Str, Limit) ->
   <<TmpPart:Limit/binary, TmpTail/binary>> = Str,
   Utf8 = unicode:characters_to_binary(TmpPart, utf16),
